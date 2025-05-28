@@ -1,0 +1,11 @@
+mongoimport --uri "mongodb+srv://Hi:12345@cluster0.2oi9qq2.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0" \
+
+  --collection properties \
+
+  --type csv \
+
+  --headerline \
+
+  --file db424fd9fb74_1748258398689.csv
+
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2ODM3MjM1NjQ2NmY5NDkzOTEzNDJiNGQiLCJpYXQiOjE3NDg0NDU1Mzh9.UYwjGX56k1q2tOmOUx_knIUt1gJCjnrubS5tuDxdlTY"
