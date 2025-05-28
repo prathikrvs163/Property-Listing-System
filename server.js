@@ -11,8 +11,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Redis client setup
-const client = redis.createClient();
+// Redis client setup (cloud-compatible)
+const client = redis.createClient({
+  url: process.env.REDIS_URL
+});
 client.connect().catch(console.error);
 
 // MongoDB Models
@@ -78,12 +80,14 @@ const cacheMiddleware = async (req, res, next) => {
       res.sendResponse(body);
     };
   } catch (err) {
-    console.error("Redis cache error:", err);
+    console.error('Redis error:', err);
+    next();
   }
-  next();
 };
 
-// Auth Routes
+// Routes
+
+// Auth
 app.post('/api/auth/register', async (req, res) => {
   const hash = await bcrypt.hash(req.body.password, 10);
   const user = await User.create({ email: req.body.email, password: hash });
@@ -98,19 +102,13 @@ app.post('/api/auth/login', async (req, res) => {
   res.json({ token });
 });
 
-// Property Routes
+// Properties (with advanced filtering + caching)
 app.get('/api/properties', cacheMiddleware, async (req, res) => {
   const {
-    title,
-    priceMin,
-    priceMax,
-    location,
-    bedrooms,
-    bathrooms,
-    areaMin,
-    areaMax,
-    type,
-    createdBy
+    title, location, type, createdBy,
+    priceMin, priceMax,
+    bedrooms, bathrooms,
+    areaMin, areaMax
   } = req.query;
 
   const filter = {};
@@ -154,7 +152,7 @@ app.delete('/api/properties/:id', authMiddleware, ownerMiddleware, async (req, r
   res.send('Deleted');
 });
 
-// Favorites Routes
+// Favorites
 app.post('/api/favorites', authMiddleware, async (req, res) => {
   const favorite = await Favorite.create({ userId: req.user._id, propertyId: req.body.propertyId });
   res.json(favorite);
@@ -170,7 +168,7 @@ app.delete('/api/favorites/:id', authMiddleware, async (req, res) => {
   res.send('Deleted');
 });
 
-// Recommendations Routes
+// Recommendations
 app.post('/api/recommend', authMiddleware, async (req, res) => {
   const { recipientEmail, propertyId, message } = req.body;
   const recipient = await User.findOne({ email: recipientEmail });
@@ -190,8 +188,16 @@ app.get('/api/recommendations', authMiddleware, async (req, res) => {
   const recommendations = await Recommendation.find({ toUserId: req.user._id })
     .populate('fromUserId', 'email')
     .populate('propertyId');
-
   res.json(recommendations);
+});
+
+app.get('/', (req, res) => {
+  res.send('Property Listing Backend is Running 🚀');
+});
+
+// Health check
+app.get('/health', (req, res) => {
+  res.send('OK');
 });
 
 // Start Server
