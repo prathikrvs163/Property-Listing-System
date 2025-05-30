@@ -14,8 +14,11 @@ app.use(express.json());
 // Redis client (Upstash-compatible)
 const client = redis.createClient({
   url: process.env.REDIS_URL,
+  password: process.env.REDIS_TOKEN,
   socket: { tls: true }
 });
+
+
 
 client.on('error', (err) => console.error('❌ Redis Client Error:', err));
 client.connect().catch(console.error);
