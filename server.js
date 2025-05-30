@@ -11,10 +11,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Redis client setup
+// Redis client (Upstash-compatible)
 const client = redis.createClient({
-  url: 'redis://localhost:6379'
+  url: process.env.REDIS_URL,
+  socket: { tls: true }
 });
+
+client.on('error', (err) => console.error('❌ Redis Client Error:', err));
 client.connect().catch(console.error);
 
 // MongoDB Models
@@ -69,7 +72,7 @@ const authMiddleware = (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
     next();
-  } catch (err) {
+  } catch {
     res.status(401).send('Invalid token');
   }
 };
@@ -84,7 +87,6 @@ const ownerMiddleware = async (req, res, next) => {
 const cacheMiddleware = async (req, res, next) => {
   const key = `properties:${JSON.stringify(req.query)}`;
   try {
-    if (!client.isOpen) await client.connect();
     const cached = await client.get(key);
     if (cached) {
       console.log('🔄 Serving from cache');
@@ -119,7 +121,7 @@ app.post('/api/auth/login', async (req, res) => {
   res.json({ token });
 });
 
-// Properties (advanced filtering + Redis caching)
+// Properties
 app.get('/api/properties', cacheMiddleware, async (req, res) => {
   const {
     title, location, city, type, createdBy,
@@ -132,7 +134,7 @@ app.get('/api/properties', cacheMiddleware, async (req, res) => {
 
   if (title) filter.title = new RegExp(title, 'i');
   if (location) filter.location = new RegExp(location, 'i');
-  if (city) filter.city = new RegExp(city, 'i'); // ✅ Case-insensitive city match
+  if (city) filter.city = new RegExp(city, 'i');
   if (type) filter.type = type;
   if (createdBy) filter.createdBy = createdBy;
   if (bedrooms) filter.bedrooms = parseInt(bedrooms);
@@ -149,8 +151,8 @@ app.get('/api/properties', cacheMiddleware, async (req, res) => {
     if (areaMin) filter.areaSqFt.$gte = parseFloat(areaMin);
     if (areaMax) filter.areaSqFt.$lte = parseFloat(areaMax);
   }
-  console.log('📦 MongoDB Query Filter:', filter);
 
+  console.log('📦 MongoDB Query Filter:', filter);
   const properties = await Property.find(filter);
   res.json(properties);
 });
