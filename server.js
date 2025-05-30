@@ -11,9 +11,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Redis client setup (cloud-compatible)
+// Redis client setup
 const client = redis.createClient({
-  url: process.env.REDIS_URL
+  url: 'redis://localhost:6379'
 });
 client.connect().catch(console.error);
 
@@ -26,13 +26,25 @@ const User = model('User', new Schema({
 }));
 
 const Property = model('Property', new Schema({
+  id: String,
   title: String,
+  type: String,
   price: Number,
+  state: String,
+  city: String,
   location: String,
+  areaSqFt: Number,
   bedrooms: Number,
   bathrooms: Number,
-  area: Number,
-  type: String,
+  amenities: [String],
+  furnished: String,
+  availableFrom: Date,
+  listedBy: String,
+  tags: [String],
+  colorTheme: String,
+  rating: Number,
+  isVerified: Boolean,
+  listingType: String,
   createdBy: { type: Types.ObjectId, ref: 'User' },
 }));
 
@@ -70,17 +82,22 @@ const ownerMiddleware = async (req, res, next) => {
 };
 
 const cacheMiddleware = async (req, res, next) => {
-  const key = JSON.stringify(req.query);
+  const key = `properties:${JSON.stringify(req.query)}`;
   try {
+    if (!client.isOpen) await client.connect();
     const cached = await client.get(key);
-    if (cached) return res.json(JSON.parse(cached));
-    res.sendResponse = res.json;
-    res.json = body => {
-      client.setEx(key, 3600, JSON.stringify(body));
-      res.sendResponse(body);
+    if (cached) {
+      console.log('🔄 Serving from cache');
+      return res.json(JSON.parse(cached));
+    }
+    const originalJson = res.json.bind(res);
+    res.json = (data) => {
+      client.setEx(key, 3600, JSON.stringify(data));
+      return originalJson(data);
     };
+    next();
   } catch (err) {
-    console.error('Redis error:', err);
+    console.error('❌ Redis Cache Error:', err.message);
     next();
   }
 };
@@ -102,10 +119,10 @@ app.post('/api/auth/login', async (req, res) => {
   res.json({ token });
 });
 
-// Properties (with advanced filtering + caching)
+// Properties (advanced filtering + Redis caching)
 app.get('/api/properties', cacheMiddleware, async (req, res) => {
   const {
-    title, location, type, createdBy,
+    title, location, city, type, createdBy,
     priceMin, priceMax,
     bedrooms, bathrooms,
     areaMin, areaMax
@@ -115,9 +132,9 @@ app.get('/api/properties', cacheMiddleware, async (req, res) => {
 
   if (title) filter.title = new RegExp(title, 'i');
   if (location) filter.location = new RegExp(location, 'i');
+  if (city) filter.city = new RegExp(city, 'i'); // ✅ Case-insensitive city match
   if (type) filter.type = type;
   if (createdBy) filter.createdBy = createdBy;
-
   if (bedrooms) filter.bedrooms = parseInt(bedrooms);
   if (bathrooms) filter.bathrooms = parseInt(bathrooms);
 
@@ -128,10 +145,11 @@ app.get('/api/properties', cacheMiddleware, async (req, res) => {
   }
 
   if (areaMin || areaMax) {
-    filter.area = {};
-    if (areaMin) filter.area.$gte = parseFloat(areaMin);
-    if (areaMax) filter.area.$lte = parseFloat(areaMax);
+    filter.areaSqFt = {};
+    if (areaMin) filter.areaSqFt.$gte = parseFloat(areaMin);
+    if (areaMax) filter.areaSqFt.$lte = parseFloat(areaMax);
   }
+  console.log('📦 MongoDB Query Filter:', filter);
 
   const properties = await Property.find(filter);
   res.json(properties);
@@ -191,18 +209,18 @@ app.get('/api/recommendations', authMiddleware, async (req, res) => {
   res.json(recommendations);
 });
 
-app.get('/', (req, res) => {
-  res.send('Property Listing Backend is Running 🚀');
-});
-
 // Health check
 app.get('/health', (req, res) => {
   res.send('OK');
 });
 
+app.get('/', (req, res) => {
+  res.send('Property Listing Backend is Running 🚀');
+});
+
 // Start Server
 mongoose.connect(process.env.MONGO_URI).then(() => {
-  app.listen(3000, () => console.log('Server running on port 3000'));
+  app.listen(3000, () => console.log('✅ Server running on port 3000'));
 });
 
 module.exports = { Property, Recommendation };
