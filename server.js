@@ -14,16 +14,22 @@ app.use(express.json());
 // Redis client (Upstash-compatible)
 // Redis client (Upstash-compatible)
 const client = redis.createClient({
-  url: process.env.REDIS_URL,
-  socket: { tls: true },
+  socket: {
+    host: process.env.REDIS_URL.replace(/^redis:\/\//, ''),
+    port: 6379,
+    tls: true
+  },
   password: process.env.REDIS_TOKEN
 });
 
 client.on('error', (err) => console.error('❌ Redis Client Error:', err));
 
-if (!client.isOpen) {
-  client.connect().catch(console.error);
-}
+(async () => {
+  if (!client.isOpen) {
+    await client.connect().catch(console.error);
+  }
+})();
+
 
 
 // MongoDB Models
