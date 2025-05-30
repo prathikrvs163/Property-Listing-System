@@ -12,16 +12,19 @@ app.use(cors());
 app.use(express.json());
 
 // Redis client (Upstash-compatible)
+// Redis client (Upstash-compatible)
 const client = redis.createClient({
   url: process.env.REDIS_URL,
   password: process.env.REDIS_TOKEN,
   socket: { tls: true }
 });
 
-
-
 client.on('error', (err) => console.error('❌ Redis Client Error:', err));
-client.connect().catch(console.error);
+
+if (!client.isOpen) {
+  client.connect().catch(console.error);
+}
+
 
 // MongoDB Models
 const { Schema, model, Types } = mongoose;
